@@ -213,6 +213,36 @@ async function analyzePolicy() {
   }
 }
 
+function getRecommendedAction(finding) {
+  const text = [
+    finding.issue || "",
+    finding.type || "",
+    finding.message || ""
+  ].join(" ").toUpperCase();
+
+  if (text.includes("CREATE_SLR_WITH_STAR_IN_ACTION_AND_RESOURCE")) {
+    return "Review which service-linked roles are actually required. Where supported, replace broad permissions with the specific actions and resource ARNs needed.";
+  }
+
+  if (text.includes("PASS_ROLE_WITH_STAR_IN_ACTION_AND_RESOURCE")) {
+    return "Limit iam:PassRole to the specific IAM role ARNs required. Where appropriate, consider an iam:PassedToService condition.";
+  }
+
+  if (
+    text.includes("FULL_WILDCARD_PERMISSION") ||
+    (text.includes("ACTION") && text.includes("RESOURCE") &&
+     text.includes("*"))
+  ) {
+    return "Replace Action: * and Resource: * with only the actions and resources the workload needs. Test the revised policy before using it.";
+  }
+
+  if (text.includes("INVALID EFFECT") || text.includes("INVALID_EFFECT")) {
+    return "Check the Effect field. IAM policies use Allow or Deny; correct the value and validate the JSON policy again.";
+  }
+
+  return "Review the finding and the linked AWS documentation. Confirm which permissions are required, make the smallest appropriate change, and validate the policy again.";
+}
+
 function renderFindings(findings) {
   results.style.display = "block";
   document.getElementById("count").textContent = findings.length;
@@ -248,7 +278,17 @@ function renderFindings(findings) {
     const message = document.createElement("p");
     message.textContent = finding.message || "No additional details provided by AWS.";
 
-    card.append(tag, heading, message);
+    const recommendationTitle = document.createElement("h4");
+recommendationTitle.textContent = "Recommended action";
+recommendationTitle.style.fontSize = "13px";
+recommendationTitle.style.margin = "16px 0 6px";
+recommendationTitle.style.color = "#61e7df";
+
+const recommendation = document.createElement("p");
+recommendation.textContent = getRecommendedAction(finding);
+recommendation.style.marginTop = "0";
+
+card.append(tag, heading, message, recommendationTitle, recommendation);
 
     if (finding.learnMore && /^https:\/\/[a-zA-Z0-9.-]+\.amazonaws\.com\//.test(finding.learnMore)) {
       const link = document.createElement("a");
