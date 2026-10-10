@@ -1,0 +1,267 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloudGuard | IAM Policy Advisor</title>
+<style>
+:root {
+  --bg:#090d18; --panel:#111827; --panel2:#151f31;
+  --border:#28344a; --text:#edf3ff; --muted:#98a8c1;
+  --blue:#8295ff; --cyan:#61e7df; --red:#ff7185;
+  --yellow:#ffd166; --green:#57d9a3;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:radial-gradient(ellipse at 50% 0%,#18274b 0%,var(--bg) 55%);
+  color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif;
+  min-height:100vh;
+}
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:22px 6%;border-bottom:1px solid #ffffff12;
+}
+.brand{display:flex;align-items:center;gap:12px;font-size:19px;font-weight:800}
+.logo{
+  width:40px;height:40px;border-radius:13px;display:grid;place-items:center;
+  background:linear-gradient(135deg,#8295ff,#61e7df);color:#09111f;font-size:22px;
+}
+.pill{font-size:12px;color:var(--cyan);border:1px solid #61e7df55;
+  background:#61e7df0c;padding:7px 11px;border-radius:30px}
+main{max-width:1080px;margin:auto;padding:48px 22px 65px}
+.eyebrow{color:var(--cyan);font-size:12px;letter-spacing:2px;font-weight:800}
+h1{font-size:clamp(34px,5vw,55px);letter-spacing:-1.8px;line-height:1.1;margin:14px 0}
+h1 span{background:linear-gradient(90deg,#a6b4ff,#61e7df);color:transparent;background-clip:text}
+.intro{color:var(--muted);line-height:1.7;max-width:670px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:30px 0}
+.stat,.card{background:linear-gradient(145deg,#141e30,#0f1625);border:1px solid var(--border);border-radius:17px}
+.stat{padding:17px}.stat strong{display:block;font-size:20px;margin-bottom:5px}
+.stat small{color:var(--muted)}
+.card{padding:23px;margin-top:18px}
+.cardhead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+h2{font-size:17px;margin:0}
+.sub{font-size:13px;color:var(--muted);line-height:1.6;margin:8px 0 17px}
+textarea{
+  width:100%;min-height:250px;resize:vertical;background:#080e19;color:#d8e6ff;
+  border:1px solid #303e58;border-radius:12px;padding:17px;
+  font:13px/1.65 Consolas,monospace;outline:none;
+}
+textarea:focus{border-color:var(--blue);box-shadow:0 0 0 3px #8295ff1b}
+button{border:0;border-radius:10px;padding:12px 17px;font-weight:750;cursor:pointer}
+.primary{background:linear-gradient(100deg,#8d9bff,#62dfdf);color:#09111e}
+.secondary{background:#1c2940;color:var(--text);border:1px solid #35435e}
+button:disabled{opacity:.55;cursor:wait}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.note{font-size:12px;color:var(--muted);line-height:1.6;margin-top:14px}
+#status{margin-top:17px;font-size:13px;color:var(--muted);line-height:1.6}
+#results{display:none}
+.resulttop{display:flex;gap:15px;align-items:center;margin:14px 0 20px}
+.count{width:62px;height:62px;border-radius:16px;background:#8295ff18;border:1px solid #8295ff55;
+display:grid;place-items:center;font-size:25px;font-weight:800;color:#b9c4ff;flex-shrink:0}
+.finding{border:1px solid var(--border);border-radius:12px;padding:16px;margin-top:10px;background:#0b1220}
+.tag{font-size:11px;display:inline-block;padding:5px 8px;border-radius:6px;background:#ffd16618;color:var(--yellow);margin-bottom:9px}
+.finding p{font-size:13px;color:#bdc9dd;line-height:1.65;overflow-wrap:anywhere}
+.finding a{font-size:12px;color:var(--cyan)}
+.empty{padding:18px;border-radius:12px;background:#57d9a30d;border:1px solid #57d9a344;color:var(--green)}
+footer{text-align:center;color:#71819a;font-size:12px;padding:25px}
+@media(max-width:600px){header{padding:16px 5%}main{padding:34px 15px}.stats{grid-template-columns:1fr}.card{padding:17px}textarea{min-height:220px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><div class="logo">⬡</div>CloudGuard</div>
+  <div class="pill">● AWS-connected</div>
+</header>
+
+<main>
+  <div class="eyebrow">CLOUD SECURITY TOOLKIT / 01</div>
+  <h1>Understand your IAM policy.<br><span>Spot risky permissions.</span></h1>
+  <p class="intro">
+    Validate AWS IAM identity policies with IAM Access Analyzer.
+    Review findings and understand which permissions may need attention.
+  </p>
+
+  <div class="stats">
+    <div class="stat"><strong>AWS IAM</strong><small>Policy validation</small></div>
+    <div class="stat"><strong>Live API</strong><small>Lambda backend</small></div>
+    <div class="stat"><strong>Private by design</strong><small>No policy history stored by this UI</small></div>
+  </div>
+
+  <section class="card">
+    <div class="cardhead">
+      <h2>01 / Policy input</h2>
+      <button class="secondary" id="sampleBtn">Load sample</button>
+    </div>
+    <p class="sub">Paste an IAM identity policy in JSON format. Start with the harmless sample, or test a deliberately broad policy.</p>
+    <textarea id="policy" spellcheck="false" aria-label="IAM policy JSON">{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:GetObject",
+      "Resource": "arn:aws:s3:::example-bucket/*"
+    }
+  ]
+}</textarea>
+    <div class="actions">
+      <button class="primary" id="analyzeBtn">Analyze policy →</button>
+      <button class="secondary" id="clearBtn">Clear</button>
+    </div>
+    <div class="note">Use example policies only. Do not paste credentials, access keys or sensitive production policies.</div>
+    <div id="status" role="status"></div>
+  </section>
+
+  <section class="card" id="results">
+    <div class="cardhead"><h2>02 / Validation report</h2><span class="pill">AWS response</span></div>
+    <div class="resulttop">
+      <div class="count" id="count">0</div>
+      <div><strong id="summary">Findings returned</strong><p class="sub" id="detail"></p></div>
+    </div>
+    <div id="findingList"></div>
+    <p class="note">A validation result is guidance, not a guarantee that a policy is safe or unsafe in every deployment context.</p>
+  </section>
+</main>
+<footer>CloudGuard · Educational prototype · Powered by AWS Lambda and IAM Access Analyzer</footer>
+
+<script>
+const API_URL = "https://njxmzbr1nc.execute-api.ap-south-1.amazonaws.com/prod/";
+
+const policyInput = document.getElementById("policy");
+const analyzeBtn = document.getElementById("analyzeBtn");
+const statusEl = document.getElementById("status");
+const results = document.getElementById("results");
+const findingList = document.getElementById("findingList");
+
+document.getElementById("sampleBtn").addEventListener("click", () => {
+  policyInput.value = JSON.stringify({
+    Version: "2012-10-17",
+    Statement: [{
+      Effect: "Allow",
+      Action: "*",
+      Resource: "*"
+    }]
+  }, null, 2);
+  statusEl.textContent = "Broad-permission sample loaded. This is only test data; do not attach it to a real role.";
+  results.style.display = "none";
+});
+
+document.getElementById("clearBtn").addEventListener("click", () => {
+  policyInput.value = "";
+  statusEl.textContent = "";
+  results.style.display = "none";
+  policyInput.focus();
+});
+
+analyzeBtn.addEventListener("click", analyzePolicy);
+
+async function analyzePolicy() {
+  let policy;
+
+  try {
+    policy = JSON.parse(policyInput.value);
+  } catch {
+  results.style.display = "none";
+  findingList.replaceChildren();
+  statusEl.textContent = "Please fix the JSON syntax before analyzing.";
+  return;
+}
+
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+    statusEl.textContent = "The policy must be a JSON object.";
+    return;
+  }
+
+  analyzeBtn.disabled = true;
+  analyzeBtn.textContent = "Analyzing…";
+  statusEl.textContent = "Sending policy to AWS for validation…";
+  results.style.display = "none";
+
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy })
+    });
+
+    const raw = await response.json();
+    let data = raw;
+
+    // Supports Lambda proxy responses and APIs returning a wrapped body.
+    if (typeof raw.body === "string") {
+      try { data = JSON.parse(raw.body); } catch { data = raw; }
+    } else if (raw.body && typeof raw.body === "object") {
+      data = raw.body;
+    }
+
+    if (!response.ok || data.status === "error" || data.error) {
+      throw new Error(data.error || data.message || `HTTP ${response.status}`);
+    }
+
+    if (!Array.isArray(data.findings)) {
+      throw new Error("The API response did not contain a findings array. Check the Lambda response format.");
+    }
+
+    renderFindings(data.findings);
+    statusEl.textContent = "Validation complete. Results came from your AWS backend.";
+  } catch (error) {
+    statusEl.textContent = "Could not analyze the policy: " + error.message +
+      ". Check API Gateway CORS settings, deployment and Lambda logs.";
+  } finally {
+    analyzeBtn.disabled = false;
+    analyzeBtn.textContent = "Analyze policy →";
+  }
+}
+
+function renderFindings(findings) {
+  results.style.display = "block";
+  document.getElementById("count").textContent = findings.length;
+  document.getElementById("summary").textContent =
+    findings.length === 0 ? "No findings returned" : "Finding(s) returned";
+  document.getElementById("detail").textContent =
+    findings.length === 0
+      ? "AWS returned no validation findings for this policy. This is not a guarantee of overall security."
+      : "Review each result below. Findings are validation guidance, not automatic proof of a vulnerability.";
+
+  findingList.replaceChildren();
+
+  if (findings.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "No findings returned by the validator.";
+    findingList.appendChild(empty);
+    return;
+  }
+
+  findings.forEach((finding, index) => {
+    const card = document.createElement("article");
+    card.className = "finding";
+
+    const tag = document.createElement("span");
+    tag.className = "tag";
+    tag.textContent = finding.type || "VALIDATION FINDING";
+
+    const heading = document.createElement("h3");
+    heading.style.fontSize = "14px";
+    heading.textContent = finding.issue || `Finding ${index + 1}`;
+
+    const message = document.createElement("p");
+    message.textContent = finding.message || "No additional details provided by AWS.";
+
+    card.append(tag, heading, message);
+
+    if (finding.learnMore && /^https:\/\/[a-zA-Z0-9.-]+\.amazonaws\.com\//.test(finding.learnMore)) {
+      const link = document.createElement("a");
+      link.href = finding.learnMore;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.textContent = "Learn more from AWS";
+      card.appendChild(link);
+    }
+
+    findingList.appendChild(card);
+  });
+}
+</script>
+</body>
+</html>
