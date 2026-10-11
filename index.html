@@ -54,7 +54,11 @@ button{border:0;border-radius:10px;padding:12px 17px;font-weight:750;cursor:poin
 button:disabled{opacity:.55;cursor:wait}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
 .note{font-size:12px;color:var(--muted);line-height:1.6;margin-top:14px}
-#status{margin-top:17px;font-size:13px;color:var(--muted);line-height:1.6}
+#status, #agentStatus{margin-top:17px;font-size:13px;line-height:1.6;transition:all .2s ease}
+#status.info, #agentStatus.info{color:var(--muted)}
+#status.busy, #agentStatus.busy{color:var(--yellow)}
+#status.error, #agentStatus.error{color:var(--red);background:#ff718512;border:1px solid #ff718544;padding:12px 14px;border-radius:10px}
+#status.success, #agentStatus.success{color:var(--green);background:#57d9a312;border:1px solid #57d9a344;padding:12px 14px;border-radius:10px}
 #results{display:none}
 .resulttop{display:flex;gap:15px;align-items:center;margin:14px 0 20px}
 .count{width:62px;height:62px;border-radius:16px;background:#8295ff18;border:1px solid #8295ff55;
@@ -64,6 +68,15 @@ display:grid;place-items:center;font-size:25px;font-weight:800;color:#b9c4ff;fle
 .finding p{font-size:13px;color:#bdc9dd;line-height:1.65;overflow-wrap:anywhere}
 .finding a{font-size:12px;color:var(--cyan)}
 .empty{padding:18px;border-radius:12px;background:#57d9a30d;border:1px solid #57d9a344;color:var(--green)}
+#agentResults{display:none}
+.explain{font-size:14px;line-height:1.7;color:#d5e2f7;white-space:pre-wrap}
+.badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800}
+.badge-passed{background:#57d9a318;color:var(--green);border:1px solid #57d9a355}
+.badge-failed{background:#ff718518;color:var(--red);border:1px solid #ff718555}
+.badge-incomplete{background:#ffd16618;color:var(--yellow);border:1px solid #ffd16655}
+.trace{list-style:none;padding:0;margin:10px 0 0}
+.trace li{font-size:12px;color:var(--muted);border-left:2px solid #35435e;padding:6px 0 6px 12px;margin:0}
+pre.policyout{background:#080e19;border:1px solid #303e58;border-radius:12px;padding:14px;overflow:auto;font:12px/1.55 Consolas,monospace;color:#d8e6ff}
 footer{text-align:center;color:#71819a;font-size:12px;padding:25px}
 @media(max-width:600px){header{padding:16px 5%}main{padding:34px 15px}.stats{grid-template-columns:1fr}.card{padding:17px}textarea{min-height:220px}}
 </style>
@@ -78,20 +91,24 @@ footer{text-align:center;color:#71819a;font-size:12px;padding:25px}
   <div class="eyebrow">CLOUD SECURITY TOOLKIT / 01</div>
   <h1>Understand your IAM policy.<br><span>Spot risky permissions.</span></h1>
   <p class="intro">
-    Validate AWS IAM identity policies with IAM Access Analyzer.
-    Review findings and understand which permissions may need attention.
+    Validate AWS IAM identity policies with IAM Access Analyzer, then optionally
+    ask the CloudGuard agent to interpret findings, propose a tighter policy, and
+    re-validate it. The agent never changes IAM in your AWS account.
   </p>
 
   <div class="stats">
     <div class="stat"><strong>AWS IAM</strong><small>Policy validation</small></div>
-    <div class="stat"><strong>Live API</strong><small>Lambda backend</small></div>
-    <div class="stat"><strong>Private by design</strong><small>No policy history stored by this UI</small></div>
+    <div class="stat"><strong>Live API</strong><small>Lambda + Access Analyzer</small></div>
+    <div class="stat"><strong>Bedrock agent</strong><small>Converse tool use, no IAM writes</small></div>
   </div>
 
   <section class="card">
     <div class="cardhead">
       <h2>01 / Policy input</h2>
-      <button class="secondary" id="sampleBtn">Load sample</button>
+      <div style="display:flex;gap:8px">
+        <button class="secondary" id="sampleSafeBtn">Safe sample</button>
+        <button class="secondary" id="sampleBtn">Load sample</button>
+      </div>
     </div>
     <p class="sub">Paste an IAM identity policy in JSON format. Start with the harmless sample, or test a deliberately broad policy.</p>
     <textarea id="policy" spellcheck="false" aria-label="IAM policy JSON">{
@@ -106,6 +123,7 @@ footer{text-align:center;color:#71819a;font-size:12px;padding:25px}
 }</textarea>
     <div class="actions">
       <button class="primary" id="analyzeBtn">Analyze policy →</button>
+      <button class="secondary" id="agentTriggerBtn">Analyze with Agent →</button>
       <button class="secondary" id="clearBtn">Clear</button>
     </div>
     <div class="note">Use example policies only. Do not paste credentials, access keys or sensitive production policies.</div>
@@ -121,19 +139,134 @@ footer{text-align:center;color:#71819a;font-size:12px;padding:25px}
     <div id="findingList"></div>
     <p class="note">A validation result is guidance, not a guarantee that a policy is safe or unsafe in every deployment context.</p>
   </section>
+
+  <section class="card" id="agentSection">
+    <div class="cardhead">
+      <div>
+        <h2>03 / CloudGuard AI Agent</h2>
+        <p class="sub" style="margin:4px 0 0">Amazon Bedrock Converse tool-use advisor · No IAM changes applied</p>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="secondary" id="agentSampleBtn">Load risky sample</button>
+        <button class="primary" id="agentBtn">Analyze with Agent →</button>
+      </div>
+    </div>
+    <p class="sub" id="agentDetail">The agent autonomously invokes IAM Access Analyzer, reasons about findings, proposes least-privilege scoping, and re-validates the proposed policy before reporting.</p>
+
+    <!-- Informational workflow guide (visible before run) -->
+    <div id="agentIdleState" style="background:#080e19;border:1px dashed #303e58;border-radius:12px;padding:16px;margin:14px 0">
+      <div style="font-size:13px;font-weight:700;color:var(--cyan);margin-bottom:8px">⚡ AI Policy Advisor Workflow</div>
+      <p style="font-size:12px;color:var(--muted);line-height:1.6;margin:0 0 10px">
+        Click <strong>Analyze with Agent →</strong> to run an autonomous Bedrock Converse tool-use cycle:
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;font-size:12px;color:#d8e6ff">
+        <div style="background:#111827;padding:10px 12px;border-radius:8px;border:1px solid #28344a"><strong>1. Tool Validation:</strong> Calls <code>validate_iam_policy</code> on input to collect real Access Analyzer findings.</div>
+        <div style="background:#111827;padding:10px 12px;border-radius:8px;border:1px solid #28344a"><strong>2. Reasoning:</strong> Evaluates wildcards, PassRole risks, and least-privilege opportunities.</div>
+        <div style="background:#111827;padding:10px 12px;border-radius:8px;border:1px solid #28344a"><strong>3. Proposal:</strong> Crafts scoped least-privilege replacement JSON preserving workload intent.</div>
+        <div style="background:#111827;padding:10px 12px;border-radius:8px;border:1px solid #28344a"><strong>4. Verification:</strong> Re-validates proposal with tool & produces verification badge and audit trace.</div>
+      </div>
+    </div>
+
+    <!-- Results container (revealed when agent completes) -->
+    <div id="agentResults" style="display:none">
+      <div id="verificationBadge" class="badge badge-incomplete">Verification pending</div>
+      <h3 style="font-size:14px;margin:18px 0 8px">Explanation</h3>
+      <p class="explain" id="agentExplanation"></p>
+      <div id="proposedWrap" style="display:none">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin:18px 0 8px">
+          <h3 style="font-size:14px;margin:0">Proposed least-privilege policy (not applied)</h3>
+          <div style="display:flex;gap:8px">
+            <button class="secondary" id="copyProposedBtn" style="padding:6px 12px;font-size:12px">Copy JSON</button>
+            <button class="secondary" id="testProposedBtn" style="padding:6px 12px;font-size:12px">Test in validator →</button>
+          </div>
+        </div>
+        <pre class="policyout" id="proposedPolicy"></pre>
+      </div>
+      <h3 style="font-size:14px;margin:18px 0 8px">Agent verification findings</h3>
+      <div id="agentFindingList"></div>
+      <h3 style="font-size:14px;margin:18px 0 8px">Execution trace</h3>
+      <ul class="trace" id="traceList"></ul>
+    </div>
+
+    <div id="agentStatus" role="status"></div>
+    <p class="note">Suggested policies are examples for learning. Review them yourself. CloudGuard will not modify real IAM policies.</p>
+  </section>
 </main>
-<footer>CloudGuard · Educational prototype · Powered by AWS Lambda and IAM Access Analyzer</footer>
+<footer>CloudGuard · Educational prototype · Lambda, IAM Access Analyzer, and Amazon Bedrock Converse</footer>
 
 <script>
 const API_URL = "https://njxmzbr1nc.execute-api.ap-south-1.amazonaws.com/prod/";
+const AGENT_URL = "https://njxmzbr1nc.execute-api.ap-south-1.amazonaws.com/prod/agent";
 
 const policyInput = document.getElementById("policy");
 const analyzeBtn = document.getElementById("analyzeBtn");
+const agentBtn = document.getElementById("agentBtn");
 const statusEl = document.getElementById("status");
 const results = document.getElementById("results");
 const findingList = document.getElementById("findingList");
+const agentResults = document.getElementById("agentResults");
+const agentFindingList = document.getElementById("agentFindingList");
 
-document.getElementById("sampleBtn").addEventListener("click", () => {
+const sampleSafeBtn = document.getElementById("sampleSafeBtn");
+const sampleBtn = document.getElementById("sampleBtn");
+const clearBtn = document.getElementById("clearBtn");
+const copyProposedBtn = document.getElementById("copyProposedBtn");
+const testProposedBtn = document.getElementById("testProposedBtn");
+
+function setStatus(text, type = "info") {
+  statusEl.textContent = text;
+  statusEl.className = type;
+  const agentStatusEl = document.getElementById("agentStatus");
+  if (agentStatusEl) {
+    agentStatusEl.textContent = text;
+    agentStatusEl.className = type;
+  }
+}
+
+const agentTriggerBtn = document.getElementById("agentTriggerBtn");
+const agentSampleBtn = document.getElementById("agentSampleBtn");
+
+if (agentTriggerBtn) {
+  agentTriggerBtn.addEventListener("click", runAgent);
+}
+
+if (agentSampleBtn) {
+  agentSampleBtn.addEventListener("click", () => {
+    policyInput.value = JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [{
+        Effect: "Allow",
+        Action: "*",
+        Resource: "*"
+      }]
+    }, null, 2);
+    setStatus("Broad wildcard sample loaded. Click 'Analyze with Agent →' to run the advisor.", "info");
+    results.style.display = "none";
+    agentResults.style.display = "none";
+    const idle = document.getElementById("agentIdleState");
+    if (idle) idle.style.display = "block";
+  });
+}
+
+if (sampleSafeBtn) {
+  sampleSafeBtn.addEventListener("click", () => {
+    policyInput.value = JSON.stringify({
+      Version: "2012-10-17",
+      Statement: [{
+        Effect: "Allow",
+        Action: "s3:GetObject",
+        Resource: "arn:aws:s3:::example-bucket/*"
+      }]
+    }, null, 2);
+    setStatus("Harmless S3 read sample loaded.", "info");
+    results.style.display = "none";
+    agentResults.style.display = "none";
+    const idle = document.getElementById("agentIdleState");
+    if (idle) idle.style.display = "block";
+  });
+}
+
+sampleBtn.addEventListener("click", () => {
   policyInput.value = JSON.stringify({
     Version: "2012-10-17",
     Statement: [{
@@ -142,39 +275,111 @@ document.getElementById("sampleBtn").addEventListener("click", () => {
       Resource: "*"
     }]
   }, null, 2);
-  statusEl.textContent = "Broad-permission sample loaded. This is only test data; do not attach it to a real role.";
+  setStatus("Broad-permission sample loaded. This is only test data; do not attach it to a real role.", "info");
   results.style.display = "none";
+  agentResults.style.display = "none";
+  const idle = document.getElementById("agentIdleState");
+  if (idle) idle.style.display = "block";
 });
 
-document.getElementById("clearBtn").addEventListener("click", () => {
+clearBtn.addEventListener("click", () => {
   policyInput.value = "";
-  statusEl.textContent = "";
+  setStatus("", "info");
   results.style.display = "none";
+  agentResults.style.display = "none";
+  const idle = document.getElementById("agentIdleState");
+  if (idle) idle.style.display = "block";
   policyInput.focus();
 });
 
+if (copyProposedBtn) {
+  copyProposedBtn.addEventListener("click", () => {
+    const code = document.getElementById("proposedPolicy").textContent;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(code).then(() => {
+        setStatus("Proposed policy copied to clipboard.", "success");
+      }).catch(() => {
+        setStatus("Could not copy to clipboard.", "error");
+      });
+    }
+  });
+}
+
+if (testProposedBtn) {
+  testProposedBtn.addEventListener("click", () => {
+    const code = document.getElementById("proposedPolicy").textContent;
+    policyInput.value = code;
+    setStatus("Proposed policy loaded into input. Validating with AWS validator…", "busy");
+    analyzePolicy();
+  });
+}
+
 analyzeBtn.addEventListener("click", analyzePolicy);
+agentBtn.addEventListener("click", runAgent);
 
-async function analyzePolicy() {
+function parsePolicyInput() {
   let policy;
-
   try {
     policy = JSON.parse(policyInput.value);
   } catch {
-  results.style.display = "none";
-  findingList.replaceChildren();
-  statusEl.textContent = "Please fix the JSON syntax before analyzing.";
-  return;
+    results.style.display = "none";
+    agentResults.style.display = "none";
+    findingList.replaceChildren();
+    setStatus("Please fix the JSON syntax before analyzing.", "error");
+    return null;
+  }
+  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
+    setStatus("The policy must be a JSON object.", "error");
+    return null;
+  }
+  return policy;
 }
 
-  if (!policy || typeof policy !== "object" || Array.isArray(policy)) {
-    statusEl.textContent = "The policy must be a JSON object.";
+function unwrapApiPayload(raw) {
+  let data = raw;
+  if (typeof raw.body === "string") {
+    try { data = JSON.parse(raw.body); } catch { data = raw; }
+  } else if (raw.body && typeof raw.body === "object") {
+    data = raw.body;
+  }
+  return data;
+}
+
+function isAllowedAwsDocsUrl(url) {
+  return /^https:\/\/[a-zA-Z0-9.-]+\.amazonaws\.com\//.test(url)
+    || /^https:\/\/docs\.aws\.amazon\.com\//.test(url);
+}
+
+function setBusy(isBusy, label) {
+  analyzeBtn.disabled = isBusy;
+  agentBtn.disabled = isBusy;
+  if (agentTriggerBtn) agentTriggerBtn.disabled = isBusy;
+  if (sampleBtn) sampleBtn.disabled = isBusy;
+  if (clearBtn) clearBtn.disabled = isBusy;
+  if (sampleSafeBtn) sampleSafeBtn.disabled = isBusy;
+  if (agentSampleBtn) agentSampleBtn.disabled = isBusy;
+  if (copyProposedBtn) copyProposedBtn.disabled = isBusy;
+  if (testProposedBtn) testProposedBtn.disabled = isBusy;
+
+  if (!isBusy) {
+    analyzeBtn.textContent = "Analyze policy →";
+    agentBtn.textContent = "Analyze with Agent →";
+    if (agentTriggerBtn) agentTriggerBtn.textContent = "Analyze with Agent →";
     return;
   }
+  if (label === "analyze") analyzeBtn.textContent = "Analyzing…";
+  if (label === "agent") {
+    agentBtn.textContent = "Agent working…";
+    if (agentTriggerBtn) agentTriggerBtn.textContent = "Agent working…";
+  }
+}
 
-  analyzeBtn.disabled = true;
-  analyzeBtn.textContent = "Analyzing…";
-  statusEl.textContent = "Sending policy to AWS for validation…";
+async function analyzePolicy() {
+  const policy = parsePolicyInput();
+  if (!policy) return;
+
+  setBusy(true, "analyze");
+  setStatus("Sending policy to AWS for validation…", "busy");
   results.style.display = "none";
 
   try {
@@ -185,14 +390,7 @@ async function analyzePolicy() {
     });
 
     const raw = await response.json();
-    let data = raw;
-
-    // Supports Lambda proxy responses and APIs returning a wrapped body.
-    if (typeof raw.body === "string") {
-      try { data = JSON.parse(raw.body); } catch { data = raw; }
-    } else if (raw.body && typeof raw.body === "object") {
-      data = raw.body;
-    }
+    const data = unwrapApiPayload(raw);
 
     if (!response.ok || data.status === "error" || data.error) {
       throw new Error(data.error || data.message || `HTTP ${response.status}`);
@@ -203,13 +401,72 @@ async function analyzePolicy() {
     }
 
     renderFindings(data.findings);
-    statusEl.textContent = "Validation complete. Results came from your AWS backend.";
+    setStatus("Validation complete. Results came from your AWS backend.", "success");
   } catch (error) {
-    statusEl.textContent = "Could not analyze the policy: " + error.message +
-      ". Check API Gateway CORS settings, deployment and Lambda logs.";
+    setStatus("Could not analyze the policy: " + error.message +
+      ". Check API Gateway CORS settings, deployment and Lambda logs.", "error");
   } finally {
-    analyzeBtn.disabled = false;
-    analyzeBtn.textContent = "Analyze policy →";
+    setBusy(false);
+  }
+}
+
+async function runAgent() {
+  const policy = parsePolicyInput();
+  if (!policy) return;
+
+  setBusy(true, "agent");
+  setStatus("Starting the CloudGuard agent. Invoking Bedrock Converse with validation tools… (usually takes 5–15s)", "busy");
+  agentResults.style.display = "none";
+
+  try {
+    const response = await fetch(AGENT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy })
+    });
+
+    let raw;
+    try {
+      raw = await response.json();
+    } catch {
+      throw new Error(
+        "The agent endpoint did not return valid JSON. Deploy the agent Lambda and API route /prod/agent, then confirm CORS."
+      );
+    }
+    const data = unwrapApiPayload(raw);
+
+    if (!response.ok || data.status === "error" || data.error) {
+      let errMsg = data.error || data.message || `HTTP ${response.status}`;
+      if (response.status === 404 || errMsg === "Missing Authentication Token" || (response.status === 403 && errMsg.includes("Missing Authentication Token"))) {
+        errMsg = "API Gateway route '/prod/agent' returned 403 (Missing Authentication Token). " +
+          "In the AWS API Gateway console for API 'njxmzbr1nc': click Resources > Actions > 'Deploy API' > Deployment stage: 'prod' > Deploy. " +
+          "The validator at /prod/ is active, but changes to /agent take effect only after deploying the stage.";
+      } else if (response.status === 403) {
+        errMsg = "Access forbidden (403). Check API Gateway resource policy or CORS settings.";
+      } else if (response.status === 504) {
+        errMsg = "Agent execution timed out (504). Bedrock Converse took longer than the API Gateway limit.";
+      }
+      throw new Error(errMsg);
+    }
+
+    if (!Array.isArray(data.findings)) {
+      throw new Error("The agent response did not contain a findings array.");
+    }
+
+    renderFindings(data.findings);
+    renderAgent(data);
+    setStatus("Agent finished. Findings verified with real validation tools. No IAM policies were modified.", "success");
+  } catch (error) {
+    agentResults.style.display = "none";
+    let msg = error.message;
+    if (error.name === "TypeError" && error.message.includes("fetch")) {
+      msg = "Could not connect to the agent API (Network / CORS error). " +
+        "Ensure the /prod/agent route is deployed with CORS enabled for your domain.";
+    }
+    setStatus("Could not run the agent: " + msg +
+      ". If Analyze still works, the existing validator is fine — the /agent route may not be deployed yet.", "error");
+  } finally {
+    setBusy(false);
   }
 }
 
@@ -290,7 +547,7 @@ recommendation.style.marginTop = "0";
 
 card.append(tag, heading, message, recommendationTitle, recommendation);
 
-    if (finding.learnMore && /^https:\/\/[a-zA-Z0-9.-]+\.amazonaws\.com\//.test(finding.learnMore)) {
+    if (finding.learnMore && isAllowedAwsDocsUrl(finding.learnMore)) {
       const link = document.createElement("a");
       link.href = finding.learnMore;
       link.target = "_blank";
@@ -300,6 +557,75 @@ card.append(tag, heading, message, recommendationTitle, recommendation);
     }
 
     findingList.appendChild(card);
+  });
+}
+
+function renderAgent(data) {
+  const idle = document.getElementById("agentIdleState");
+  if (idle) idle.style.display = "none";
+  agentResults.style.display = "block";
+  const verification = data.verification || {};
+  const status = verification.status || "incomplete";
+  const badge = document.getElementById("verificationBadge");
+  badge.className = "badge badge-" + status;
+  badge.textContent = "Verification " + status;
+  document.getElementById("agentDetail").textContent =
+    verification.summary || "The agent finished without a verification summary.";
+  document.getElementById("agentExplanation").textContent =
+    data.explanation || "No explanation was returned.";
+
+  const proposedWrap = document.getElementById("proposedWrap");
+  const proposedEl = document.getElementById("proposedPolicy");
+  if (data.proposedPolicy) {
+    proposedWrap.style.display = "block";
+    proposedEl.textContent = JSON.stringify(data.proposedPolicy, null, 2);
+  } else {
+    proposedWrap.style.display = "none";
+    proposedEl.textContent = "";
+  }
+
+  agentFindingList.replaceChildren();
+  const vFindings = verification.findings || [];
+  if (!vFindings.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "No additional verification findings.";
+    agentFindingList.appendChild(empty);
+  } else {
+    vFindings.forEach((finding, index) => {
+      const card = document.createElement("article");
+      card.className = "finding";
+      const tag = document.createElement("span");
+      tag.className = "tag";
+      tag.textContent = finding.type || "VALIDATION FINDING";
+      const heading = document.createElement("h3");
+      heading.style.fontSize = "14px";
+      heading.textContent = finding.issue || "Finding " + (index + 1);
+      const message = document.createElement("p");
+      message.textContent = finding.message || "No additional details provided.";
+      card.append(tag, heading, message);
+      agentFindingList.appendChild(card);
+    });
+  }
+
+  const traceList = document.getElementById("traceList");
+  traceList.replaceChildren();
+  (data.trace || []).forEach((step, index) => {
+    const item = document.createElement("li");
+    const stepLabel = step.name ? (step.step + " (" + step.name + ")") : (step.step || "step");
+    const bits = [
+      (index + 1) + ".",
+      stepLabel,
+      step.stopReason ? "(" + step.stopReason + ")" : "",
+      step.target ? "target=" + step.target : "",
+      step.sources ? "sources=[" + step.sources.join(",") + "]" : "",
+      typeof step.findingCount === "number" ? "findings=" + step.findingCount : "",
+      step.ok === false ? "failed" : "",
+      step.error ? "error: " + String(step.error) : "",
+      step.note || ""
+    ].filter(Boolean);
+    item.textContent = bits.join(" ");
+    traceList.appendChild(item);
   });
 }
 </script>
