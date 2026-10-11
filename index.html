@@ -571,13 +571,17 @@ function renderAgent(data) {
   badge.textContent = "Verification " + status;
   document.getElementById("agentDetail").textContent =
     verification.summary || "The agent finished without a verification summary.";
-  document.getElementById("agentExplanation").textContent =
-    const cleanExplanation = (data.explanation || "")
+  
+const rawExplanation = data.explanation || "";
+
+const cleanExplanation = rawExplanation
   .replace(/<thinking>[\s\S]*?<\/thinking>/gi, "")
+  .replace(/&lt;thinking&gt;[\s\S]*?&lt;\/thinking&gt;/gi, "")
   .trim();
 
 document.getElementById("agentExplanation").textContent =
   cleanExplanation || "Policy validation completed. Review the findings and proposed policy below.";
+;
   const proposedWrap = document.getElementById("proposedWrap");
   const proposedEl = document.getElementById("proposedPolicy");
   if (data.proposedPolicy) {
